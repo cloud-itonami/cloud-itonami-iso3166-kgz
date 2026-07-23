@@ -1,0 +1,81 @@
+(ns marketentry.registry-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [marketentry.registry :as registry]))
+
+(deftest engagement-fee-recompute
+  (let [e {:base-fee 500000 :monthly-rate 30000 :monitoring-months 12 :claimed-fee 860000.0}]
+    (is (== 860000.0 (registry/compute-engagement-fee e)))
+    (is (true? (registry/engagement-fee-matches-claim? e))))
+  (let [bad {:base-fee 500000 :monthly-rate 30000 :monitoring-months 12 :claimed-fee 999000.0}]
+    (is (false? (registry/engagement-fee-matches-claim? bad)))))
+
+(deftest register-draft-and-submit
+  (let [d (registry/register-draft "eng-1" "KGZ" 0)
+        s (registry/register-submit "eng-1" "KGZ" 0)]
+    (is (= "KGZ-DFT-000000" (get d "draft_number")))
+    (is (= "KGZ-SUB-000000" (get s "submit_number")))
+    (is (nil? (get-in d ["certificate" "proof"])))
+    (is (= "draft-unsigned" (get-in s ["certificate" "status"])))))
+
+(deftest register-requires-ids
+  (is (thrown? Exception (registry/register-draft "" "KGZ" 0)))
+  (is (thrown? Exception (registry/register-submit "eng-1" "" 0))))
+
+(deftest probation-period-exceeds-ceiling-recompute
+  (testing "Labour Code Art.24 -- a declared general-category probation period within the 3-month ceiling is fine"
+    (is (false? (registry/probation-period-exceeds-ceiling?
+                 {:engages-local-staff-under-probation? true
+                  :probation-employee-category :general :probation-period-months 3}))))
+  (testing "a declared general-category probation period ABOVE the 3-month ceiling is a violation"
+    (is (true? (registry/probation-period-exceeds-ceiling?
+                {:engages-local-staff-under-probation? true
+                 :probation-employee-category :general :probation-period-months 4}))))
+  (testing "a declared senior-management probation period within the 6-month ceiling is fine"
+    (is (false? (registry/probation-period-exceeds-ceiling?
+                 {:engages-local-staff-under-probation? true
+                  :probation-employee-category :senior-management :probation-period-months 6}))))
+  (testing "a declared senior-management probation period ABOVE the 6-month ceiling is a violation"
+    (is (true? (registry/probation-period-exceeds-ceiling?
+                {:engages-local-staff-under-probation? true
+                 :probation-employee-category :senior-management :probation-period-months 7}))))
+  (testing "exactly at each category's own ceiling does not violate the range"
+    (is (false? (registry/probation-period-exceeds-ceiling?
+                 {:engages-local-staff-under-probation? true
+                  :probation-employee-category :general :probation-period-months 3})))
+    (is (false? (registry/probation-period-exceeds-ceiling?
+                 {:engages-local-staff-under-probation? true
+                  :probation-employee-category :senior-management :probation-period-months 6}))))
+  (testing "a general-category duration that would be fine for senior-management (e.g. 6 months) still violates the general 3-month ceiling"
+    (is (true? (registry/probation-period-exceeds-ceiling?
+                {:engages-local-staff-under-probation? true
+                 :probation-employee-category :general :probation-period-months 6}))))
+  (testing "entity-condition-gated: a no-op (false) unless :engages-local-staff-under-probation? is true"
+    (is (false? (registry/probation-period-exceeds-ceiling?
+                 {:engages-local-staff-under-probation? false
+                  :probation-employee-category :general :probation-period-months 999})))
+    (is (false? (registry/probation-period-exceeds-ceiling? {}))))
+  (testing "missing/non-numeric probation-period-months for a declared true engagement is never treated as violating the ceiling here (evidence-incomplete's job)"
+    (is (false? (registry/probation-period-exceeds-ceiling?
+                 {:engages-local-staff-under-probation? true
+                  :probation-employee-category :general})))
+    (is (false? (registry/probation-period-exceeds-ceiling?
+                 {:engages-local-staff-under-probation? true
+                  :probation-employee-category :general :probation-period-months nil})))))
+
+(deftest probation-ceiling-senior-categories-are-the-full-article-24-enumeration
+  (testing "Article 24's own 7-category enumeration -- meaningfully larger/different than a sibling's 4-category list (see namespace docstring)"
+    (is (= 7 (count (:senior-categories registry/probation-ceiling))))
+    (is (contains? (:senior-categories registry/probation-ceiling) "deputies of chief accountants"))
+    (is (contains? (:senior-categories registry/probation-ceiling) "heads of branches"))
+    (is (contains? (:senior-categories registry/probation-ceiling) "heads of representative offices"))))
+
+(deftest procurement-violation-fine-ci-recompute
+  (testing "Article 356 -- documented ground-truth tier lookup (NOT wired into the governor, see marketentry.governor docstring)"
+    (is (= 100 (registry/procurement-violation-fine-ci 500000)))
+    (is (= 100 (registry/procurement-violation-fine-ci 1000000)) "at the first bracket's own ceiling")
+    (is (= 125 (registry/procurement-violation-fine-ci 1000001)))
+    (is (= 125 (registry/procurement-violation-fine-ci 3000000)))
+    (is (= 175 (registry/procurement-violation-fine-ci 3000001)))
+    (is (= 175 (registry/procurement-violation-fine-ci 5000000)))
+    (is (= 200 (registry/procurement-violation-fine-ci 5000001)))
+    (is (= 200 (registry/procurement-violation-fine-ci 50000000)) "unbounded top bracket")))
