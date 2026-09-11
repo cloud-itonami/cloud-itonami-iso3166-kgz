@@ -62,7 +62,7 @@ iteration studied in depth):
   its own fines fall on the procuring organization's officials, not on
   this actor's own bidder-side operator (see `marketentry.governor`'s
   docstring for the full reasoning).
-- `src/statute/facts.cljc` -- general-law catalog: the Labour Code of
+- `src/statute/facts.cljk` -- general-law catalog: the Labour Code of
   the Kyrgyz Republic (adopted 23 January 2025 No. 23), the Tax Code
   (18 January 2022 No. 3), the Law "On Public Procurement" (14 April
   2022 No. 27), and the Law "On Investments in the Kyrgyz Republic"
@@ -103,7 +103,7 @@ Alongside the market-entry / statute catalogs, this repo carries a
 `com-junkawasaki/root`) — national dishes, protected products, beverages,
 crafts, festivals and heritage sites for Kyrgyzstan:
 
-- `src/culture/facts.cljc` — the catalog, source of truth (keyed by
+- `src/culture/facts.cljk` — the catalog, source of truth (keyed by
   uppercase ISO3, mirroring `statute.facts`).
 - `schema/culture.edn` — DataScript schema.
 - `data/culture-tx.edn` — derived DataScript tx-data (regenerated from
